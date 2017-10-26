@@ -8,9 +8,9 @@ import (
 
 	"github.com/daaku/go.httpgzip"
 	"github.com/rs/cors"
+	"github.com/throttled/throttled"
+	"github.com/throttled/throttled/store/memstore"
 	"gopkg.in/h2non/bimg.v1"
-	"gopkg.in/throttled/throttled.v2"
-	"gopkg.in/throttled/throttled.v2/store/memstore"
 )
 
 func Middleware(fn func(http.ResponseWriter, *http.Request), o ServerOptions) http.Handler {
