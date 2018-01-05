@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/url"
 	"os"
 	"runtime"
@@ -13,11 +14,7 @@ import (
 	"time"
 
 	bimg "gopkg.in/h2non/bimg.v1"
-
-	. "github.com/tj/go-debug"
 )
-
-var debug = Debug("imaginary")
 
 var (
 	aAddr              = flag.String("a", "", "Bind address")
@@ -28,7 +25,7 @@ var (
 	aHelpl             = flag.Bool("help", false, "Show help")
 	aPathPrefix        = flag.String("path-prefix", "/", "Url path prefix to listen to")
 	aCors              = flag.Bool("cors", false, "Enable CORS support")
-	aGzip              = flag.Bool("gzip", false, "Enable gzip compression")
+	aGzip              = flag.Bool("gzip", false, "Enable gzip compression (deprecated)")
 	aAuthForwarding    = flag.Bool("enable-auth-forwarding", false, "Forwards X-Forward-Authorization or Authorization header to the image source server. -enable-url-source flag must be defined. Tip: secure your server from public access to prevent attack vectors")
 	aEnableURLSource   = flag.Bool("enable-url-source", false, "Enable remote HTTP URL image source processing")
 	aEnablePlaceholder = flag.Bool("enable-placeholder", false, "Enable image response placeholder to be used in case of error")
@@ -40,6 +37,7 @@ var (
 	aKeyFile           = flag.String("keyfile", "", "TLS private key file path")
 	aAuthorization     = flag.String("authorization", "", "Defines a constant Authorization header value passed to all the image source servers. -enable-url-source flag must be defined. This overwrites authorization headers forwarding behavior via X-Forward-Authorization")
 	aPlaceholder       = flag.String("placeholder", "", "Image path to image custom placeholder to be used in case of error. Recommended minimum image size is: 1200x1200")
+	aDisableEndpoints  = flag.String("disable-endpoints", "", "Comma separated endpoints to disable. E.g: form,crop,rotate,health")
 	aHTTPCacheTTL      = flag.Int("http-cache-ttl", -1, "The TTL in seconds")
 	aReadTimeout       = flag.Int("http-read-timeout", 60, "HTTP read timeout in seconds")
 	aWriteTimeout      = flag.Int("http-write-timeout", 60, "HTTP write timeout in seconds")
@@ -53,10 +51,11 @@ const usage = `imaginary %s
 
 Usage:
   imaginary -p 80
-  imaginary -cors -gzip
+  imaginary -cors
   imaginary -concurrency 10
   imaginary -path-prefix /api/v1
   imaginary -enable-url-source
+  imaginary -disable-endpoints form,health,crop,rotate
   imaginary -enable-url-source -allowed-origins http://localhost,http://server.com
   imaginary -enable-url-source -enable-auth-forwarding
   imaginary -enable-url-source -authorization "Basic AwDJdL2DbwrD=="
@@ -72,7 +71,8 @@ Options:
   -v, -version              Show version
   -path-prefix <value>      Url path prefix to listen to [default: "/"]
   -cors                     Enable CORS support [default: false]
-  -gzip                     Enable gzip compression [default: false]
+  -gzip                     Enable gzip compression (deprecated) [default: false]
+  -disable-endpoints        Comma separated endpoints to disable. E.g: form,crop,rotate,health [default: ""]
   -key <key>                Define API key for authorization
   -mount <path>             Mount server local directory
   -http-cache-ttl <num>     The TTL in seconds. Adds caching headers to locally served files.
@@ -114,7 +114,6 @@ func main() {
 	opts := ServerOptions{
 		Port:              port,
 		Address:           *aAddr,
-		Gzip:              *aGzip,
 		CORS:              *aCors,
 		AuthForwarding:    *aAuthForwarding,
 		EnableURLSource:   *aEnableURLSource,
@@ -135,6 +134,11 @@ func main() {
 		MaxAllowedSize:    *aMaxAllowedSize,
 	}
 
+	// Show warning if gzip flag is passed
+	if *aGzip {
+		fmt.Println("warning: -gzip flag is deprecated and will not have effect")
+	}
+
 	// Create a memory release goroutine
 	if *aMRelease > 0 {
 		memoryRelease(*aMRelease)
@@ -148,6 +152,11 @@ func main() {
 	// Validate HTTP cache param, if present
 	if *aHTTPCacheTTL != -1 {
 		checkHttpCacheTtl(*aHTTPCacheTTL)
+	}
+
+	// Parse endpoint names to disabled, if present
+	if *aDisableEndpoints != "" {
+		opts.Endpoints = parseEndpoints(*aDisableEndpoints)
 	}
 
 	// Read placeholder image, if required
@@ -238,6 +247,17 @@ func parseOrigins(origins string) []*url.URL {
 	return urls
 }
 
+func parseEndpoints(input string) Endpoints {
+	endpoints := Endpoints{}
+	for _, endpoint := range strings.Split(input, ",") {
+		endpoint = strings.ToLower(strings.TrimSpace(endpoint))
+		if endpoint != "" {
+			endpoints = append(endpoints, endpoint)
+		}
+	}
+	return endpoints
+}
+
 func memoryRelease(interval int) {
 	ticker := time.NewTicker(time.Duration(interval) * time.Second)
 	go func() {
@@ -251,4 +271,11 @@ func memoryRelease(interval int) {
 func exitWithError(format string, args ...interface{}) {
 	fmt.Fprintf(os.Stderr, format+"\n", args)
 	os.Exit(1)
+}
+
+func debug(msg string, values ...interface{}) {
+	debug := os.Getenv("DEBUG")
+	if debug == "imaginary" || debug == "*" {
+		log.Printf(msg, values...)
+	}
 }

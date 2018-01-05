@@ -1,4 +1,43 @@
 
+v1.0.11 / 2017-11-14
+====================
+
+  * feat(bimg): update to v1.0.17
+  * Merge branch 'realla-add-fit'
+  * merge(add-fit): fix conflicts in server_test.go
+  * refactor(image): remove else statement
+  * fix(test): remove unused variable body
+  * Add type=auto using client Accept header to auto negotiate type. (#162)
+  * Add /fit action
+
+v1.0.10 / 2017-10-30
+====================
+
+  * feat(bimg): upgrade to v1.0.16
+  * fix(docs): remove no-form docs
+  * feat(#156): support disable endpoints
+
+v1.0.9 / 2017-10-29
+===================
+
+  * fix(#157): disable gzip compression support
+  * debug(travis)
+  * debug(travis)
+  * debug(travis)
+  * debug(travis)
+  * debug(travis)
+  * refactor(Dockerfile): use local source copy
+  * refactor(requirements): add Go 1.6+ as minimum requirement
+  * feat(vendor): support dependencies vendoring
+  * refactor(Gopkg): define version
+  * feat(vendor): add vendor dependencies
+  * feat(travis): add Go 1.9 support
+  * refactor(docs): specify POST payloads in description
+  * feat(docs): add imagelayer badge
+  * feat(docs): add imagelayer badge
+  * feat(docs): add imagelayer badge
+  * feat(docs): add imagelayer badge
+
 v1.0.8 / 2017-10-06
 ===================
 

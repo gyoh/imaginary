@@ -1,6 +1,6 @@
 # Start from a Debian image with the latest version of Go installed
 # and a workspace (GOPATH) configured at /go.
-FROM ubuntu:16.04
+FROM ubuntu:16.04 as builder
 MAINTAINER tomas@aparicio.me
 
 ENV LIBVIPS_VERSION 8.5.6
@@ -14,7 +14,7 @@ RUN \
   automake build-essential curl \
   gobject-introspection gtk-doc-tools libglib2.0-dev libjpeg-turbo8-dev libpng12-dev \
   libwebp-dev libtiff5-dev libgif-dev libexif-dev libxml2-dev libpoppler-glib-dev \
-  swig libmagickwand-dev libpango1.0-dev libmatio-dev libopenslide-dev libcfitsio3-dev \
+  swig libmagickwand-dev libpango1.0-dev libmatio-dev libopenslide-dev libcfitsio-dev \
   libgsf-1-dev fftw3-dev liborc-0.4-dev librsvg2-dev && \
 
   # Build libvips
@@ -38,7 +38,7 @@ RUN \
 ENV PORT 9000
 
 # Go version to use
-ENV GOLANG_VERSION 1.9.1
+ENV GOLANG_VERSION 1.9.2
 
 # gcc for cgo
 RUN apt-get update && apt-get install -y \
@@ -47,7 +47,7 @@ RUN apt-get update && apt-get install -y \
   && rm -rf /var/lib/apt/lists/*
 
 ENV GOLANG_DOWNLOAD_URL https://golang.org/dl/go$GOLANG_VERSION.linux-amd64.tar.gz
-ENV GOLANG_DOWNLOAD_SHA256 07d81c6b6b4c2dcf1b5ef7c27aaebd3691cdb40548500941f92b221147c5d9c7
+ENV GOLANG_DOWNLOAD_SHA256 de874549d9a8d8d8062be05808509c09a88a248e77ec14eb77453530829ac02b
 
 RUN curl -fsSL --insecure "$GOLANG_DOWNLOAD_URL" -o golang.tar.gz \
   && echo "$GOLANG_DOWNLOAD_SHA256 golang.tar.gz" | sha256sum -c - \
@@ -62,10 +62,39 @@ WORKDIR $GOPATH
 
 # Fetch the latest version of the package
 RUN go get -u golang.org/x/net/context
-RUN go get -u github.com/h2non/imaginary
+RUN go get -u github.com/golang/dep/cmd/dep
 
-# Run the outyet command by default when the container starts.
-ENTRYPOINT ["/go/bin/imaginary"]
+# Copy imaginary sources
+COPY . $GOPATH/src/github.com/h2non/imaginary
+
+# Compile imaginary
+RUN go build -race -o bin/imaginary github.com/h2non/imaginary
+
+FROM ubuntu:16.04
+
+RUN \
+  # Install runtime dependencies
+  apt-get update && \
+  DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y \
+  libglib2.0-0 libjpeg-turbo8 libpng12-0 libopenexr22 \
+  libwebp5 libtiff5 libgif7 libexif12 libxml2 libpoppler-glib8 \
+  libmagickwand-6.q16-2 libpango1.0-0 libmatio2 libopenslide0 \
+  libgsf-1-114 fftw3 liborc-0.4 librsvg2-2 libcfitsio2 && \
+  # Clean up
+  apt-get autoremove -y && \
+  apt-get autoclean && \
+  apt-get clean && \
+  rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+COPY --from=builder /usr/local/lib /usr/local/lib
+RUN ldconfig
+COPY --from=builder /go/bin/imaginary bin/
+
+# Server port to listen
+ENV PORT 9000
+
+# Run the entrypoint command by default when the container starts.
+ENTRYPOINT ["bin/imaginary"]
 
 # Expose the server TCP port
 EXPOSE 9000

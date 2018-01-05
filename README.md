@@ -6,7 +6,7 @@
 It's almost dependency-free and only uses [`net/http`](http://golang.org/pkg/net/http/) native package without additional abstractions for better [performance](#performance).
 
 Supports multiple [image operations](#supported-image-operations) exposed as a simple [HTTP API](#http-api),
-with additional optional features such as **API token authorization**, **gzip compression**, **HTTP traffic throttle** strategy and **CORS support** for web clients.
+with additional optional features such as **API token authorization**, **HTTP traffic throttle** strategy and **CORS support** for web clients.
 
 `imaginary` **can read** images **from HTTP POST payloads**, **server local path** or **remote HTTP servers**, supporting **JPEG**, **PNG**, **WEBP**, and optionally **TIFF**, **PDF**, **GIF** and **SVG** formats if `libvips@8.3+` is compiled with proper library bindings.
 
@@ -20,8 +20,6 @@ and it's typically 4x faster than using the quickest ImageMagick and GraphicsMag
 settings or Go native `image` package, and in some cases it's even 8x faster processing JPEG images.
 
 To get started, take a look the [installation](#installation) steps, [usage](#usage) cases and [API](#http-api) docs.
-
-<a target='_blank' rel='nofollow' href='https://app.codesponsor.io/link/1MpD3pzt63uUeG43NP4tDHPY/h2non/imaginary'>  <img alt='Sponsor' width='888' height='68' src='https://app.codesponsor.io/embed/1MpD3pzt63uUeG43NP4tDHPY/h2non/imaginary.svg' /></a>
 
 ## Contents
 
@@ -58,6 +56,7 @@ To get started, take a look the [installation](#installation) steps, [usage](#us
 - Flop
 - Zoom
 - Thumbnail
+- Fit
 - [Pipeline](#get--post-pipeline) of multiple independent image transformations in a single HTTP request.
 - Configurable image area extraction
 - Embed/Extend image, supporting multiple modes (white, black, mirror, copy or custom background color)
@@ -70,9 +69,9 @@ To get started, take a look the [installation](#installation) steps, [usage](#us
 
 ## Prerequisites
 
-- [libvips](https://github.com/jcupitt/libvips) v7.40.0+ or 8+ (8.4+ recommended)
+- [libvips](https://github.com/jcupitt/libvips) 8.3+ (8.5+ recommended)
 - C compatible compiler such as gcc 4.6+ or clang 3.0+
-- Go 1.3+
+- Go 1.6+
 
 ## Installation
 
@@ -267,10 +266,11 @@ The most expensive image operation under high concurrency scenarios (> 20 req/se
 ```
 Usage:
   imaginary -p 80
-  imaginary -cors -gzip
+  imaginary -cors
   imaginary -concurrency 10
   imaginary -path-prefix /api/v1
   imaginary -enable-url-source
+  imaginary -disable-endpoints form,health,crop,rotate
   imaginary -enable-url-source -allowed-origins http://localhost,http://server.com
   imaginary -enable-url-source -enable-auth-forwarding
   imaginary -enable-url-source -authorization "Basic AwDJdL2DbwrD=="
@@ -286,16 +286,18 @@ Options:
   -v, -version              Show version
   -path-prefix <value>      Url path prefix to listen to [default: "/"]
   -cors                     Enable CORS support [default: false]
-  -gzip                     Enable gzip compression [default: false]
+  -gzip                     Enable gzip compression (deprecated) [default: false]
+  -disable-endpoints        Comma separated endpoints to disable. E.g: form,crop,rotate,health [default: ""]
   -key <key>                Define API key for authorization
   -mount <path>             Mount server local directory
-  -http-cache-ttl <num>     The TTL in seconds. Adds caching headers.
+  -http-cache-ttl <num>     The TTL in seconds. Adds caching headers to locally served files.
   -http-read-timeout <num>  HTTP read timeout in seconds [default: 30]
   -http-write-timeout <num> HTTP write timeout in seconds [default: 30]
   -enable-url-source        Restrict remote image source processing to certain origins (separated by commas)
   -enable-placeholder       Enable image response placeholder to be used in case of error [default: false]
   -enable-auth-forwarding   Forwards X-Forward-Authorization or Authorization header to the image source server. -enable-url-source flag must be defined. Tip: secure your server from public access to prevent attack vectors
   -allowed-origins <urls>   Restrict remote image source processing to certain origins (separated by commas)
+  -max-allowed-size <bytes> Restrict maximum size of http image source (in bytes)
   -certfile <path>          TLS certificate file path
   -keyfile <path>           TLS private key file path
   -authorization <value>    Defines a constant Authorization header value passed to all the image source servers. -enable-url-source flag must be defined. This overwrites authorization headers forwarding behavior via X-Forward-Authorization
@@ -390,12 +392,12 @@ curl -O "http://localhost:8088/crop?width=500&height=400&file=foo/bar/image.jpg"
 
 Fetching the image from a remote server (you must pass the `-enable-url-source` flag):
 ```
-curl -O "http://localhost:8088/crop?width=500&height=400&url=https://raw.githubusercontent.com/h2non/imaginary/master/fixtures/large.jpg"
+curl -O "http://localhost:8088/crop?width=500&height=400&url=https://raw.githubusercontent.com/h2non/imaginary/master/testdata/large.jpg"
 ```
 
 Crop behaviour can be influenced with the `gravity` parameter. You can specify a preference for a certain region (north, south, etc.). To enable Smart Crop you can specify the value "smart" to autodetect the most interesting section to consider as center point for the crop operation:
 ```
-curl -O "http://localhost:8088/crop?width=500&height=200&gravity=smart&url=https://raw.githubusercontent.com/h2non/imaginary/master/fixtures/smart-crop.jpg"
+curl -O "http://localhost:8088/crop?width=500&height=200&gravity=smart&url=https://raw.githubusercontent.com/h2non/imaginary/master/testdata/smart-crop.jpg"
 ```
 
 
@@ -482,7 +484,7 @@ Image measures are always in pixels, unless otherwise indicated.
 - **text**        `string` - Watermark text content. Example: `copyright (c) 2189`
 - **font**        `string` - Watermark text font type and format. Example: `sans bold 12`
 - **color**       `string` - Watermark text RGB decimal base color. Example: `255,200,150`
-- **type**        `string` - Specify the image format to output. Possible values are: `jpeg`, `png` and `webp`
+- **type**        `string` - Specify the image format to output. Possible values are: `jpeg`, `png`, `webp` and `auto`. `auto` will use the preferred format requested by the client in the HTTP Accept header. A client can provide multiple comma-separated choices in `Accept` with the best being the one picked.
 - **gravity**     `string` - Define the crop operation gravity. Supported values are: `north`, `south`, `centre`, `west`, `east` and `smart`. Defaults to `centre`.
 - **file**        `string` - Use image from server local file path. In order to use this you must pass the `-mount=<dir>` flag.
 - **url**         `string` - Fetch the image from a remote HTTP server. In order to use this you must pass the `-enable-url-source` flag.
@@ -735,6 +737,36 @@ Accepts: `image/*, multipart/form-data`. Content-Type: `image/*`
 
 - width `int`
 - height `int`
+- quality `int` (JPEG-only)
+- compression `int` (PNG-only)
+- type `string`
+- file `string` - Only GET method and if the `-mount` flag is present
+- url `string` - Only GET method and if the `-enable-url-source` flag is present
+- embed `bool`
+- force `bool`
+- rotate `int`
+- norotation `bool`
+- noprofile `bool`
+- stripmeta `bool`
+- flip `bool`
+- flop `bool`
+- extend `string`
+- background `string` - Example: `?background=250,20,10`
+- colorspace `string`
+- sigma `float`
+- minampl `float`
+- field `string` - Only POST and `multipart/form` payloads
+
+#### GET | POST /fit
+Accepts: `image/*, multipart/form-data`. Content-Type: `image/*`
+
+Resize an image to fit within width and height, without cropping. Image aspect ratio is maintained
+The width and height specify a maximum bounding box for the image.
+
+##### Allowed params
+
+- width `int` `required`
+- height `int` `required`
 - quality `int` (JPEG-only)
 - compression `int` (PNG-only)
 - type `string`
